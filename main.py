@@ -14,7 +14,7 @@ SHOW_3D = True
 SHOW_2D = True
 
 # Archivo de parámetros
-FILE_NAME = 'cola/params.json'
+FILE_NAME = 'queue/params.json'
 with open(FILE_NAME, "r") as f:
     params = json.load(f)
 
