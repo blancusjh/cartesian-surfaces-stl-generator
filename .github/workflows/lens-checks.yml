@@ -21,3 +21,12 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[test]'
       - run: python -m pytest -v
+      - name: Export finite-rim example at the default 1 micrometre budget
+        run: python main.py --config queue/params.json --aperture-diameter-mm 180 --output lens_with_rim.stl --report lens_with_rim.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lens-with-finite-rim-and-metrics
+          path: |
+            lens_with_rim.stl
+            lens_with_rim.json
+          retention-days: 14

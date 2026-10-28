@@ -115,7 +115,9 @@ optical surface. The report records finite-rim status, edge thickness and
 a sampled minimum axial thickness. The circular side wall follows the same
 azimuth sagitta budget. Choose an edge thickness appropriate for your
 material, printer and handling; this option supplies no strength guarantee.
-The Python API accepts `aperture_radius_mm`.
+The Python API accepts `aperture_radius_mm`. Successful GitHub Actions runs
+also attach the 180 mm finite-rim example STL and its metrics as a downloadable
+artifact, retained for 14 days.
 
 ## Mesh and resource checks
 

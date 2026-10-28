@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import trimesh
+from scipy.optimize import brentq
 from math_utils import biseccion, biseccion_mod
 from singlet import SigmaCurve, OmegaLens, sigma
 from surface_generation import (adaptive_profile, build_lens_mesh, export_to_stl,
@@ -154,3 +155,20 @@ def test_finite_aperture_rim_is_closed_and_has_positive_edge_thickness(tmp_path)
     for invalid in (-1, 0, np.nan, lens.intersection_point[1]*1.1):
         with pytest.raises(ValueError):
             build_lens_mesh(lens, 0.005, aperture_radius_mm=invalid)
+
+def test_actual_mesh_face_interior_against_independent_analytic_inverse():
+    lens = lens_at()
+    vertices, faces, _ = build_lens_mesh(lens, 0.005)
+    triangles = vertices[faces]
+    picks = np.unique(np.linspace(0, len(faces)-1, 151, dtype=int))
+    for index in picks:
+        triangle = triangles[index]
+        point = triangle.mean(axis=0)
+        radius = np.hypot(point[0], point[1])
+        distances = []
+        for surface, end in zip((lens.s1, lens.s2), lens.rho_intersection):
+            rho = brentq(lambda value: float(surface.evaluate(value)[1])-radius,
+                         0, end, xtol=1e-12)
+            exact_z = float(surface.evaluate(rho)[0])
+            distances.append(abs(point[2]-exact_z))
+        assert min(distances) < 0.005
