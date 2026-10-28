@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cartesian-surfaces-stl-generator"
+version = "0.2.0"
+description = "Adaptive Cartesian-oval lens meshes and headless binary STL export"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "trimesh>=4"]
+view = ["vispy>=0.14", "matplotlib>=3.7", "PyQt6>=6.5"]
+
+[project.scripts]
+cartesian-lens = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "singlet", "math_utils", "surface_generation", "viewer"]
+
+[tool.pytest.ini_options]
+testpaths = ["qa"]
+addopts = "-ra"

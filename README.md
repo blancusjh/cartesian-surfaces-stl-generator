@@ -1,45 +1,32 @@
 # Cartesian Surfaces STL Generator
 
-Generate an axisymmetric optical singlet from two Cartesian ovoid surfaces.
-The project calculates the meridional profile of each refracting surface,
-finds their intersection, and revolves the enclosed profile about the optical
-axis to produce a triangular mesh suitable for STL export.
-
-The current implementation is intended for exploring Cartesian-ovoid lens
-geometries. It includes interactive 2D and 3D visualizations and a small STL
-export API.
-
-## How it works
-
-1. `SigmaCurve` represents a Cartesian ovoid in the meridional `(z, r)` plane.
-2. `OmegaLens` finds the intersection of two ovoids with a two-variable
-   Newton-Raphson solve and joins the two surface segments into the lens
-   profile.
-3. `revolve_curve` rotates that profile around the `z` axis and returns mesh
-   vertices and triangular faces.
-4. `export_to_stl` writes that mesh as an ASCII STL file.
-
-All examples treat distances as centimetres. The numerical code itself does
-not enforce a unit system, so use one unit system consistently.
-
-## Requirements
-
-- Python 3.10 or newer
-- NumPy
-- Matplotlib
-- VisPy (for the interactive 3D viewer)
-
-Install the dependencies in a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install numpy matplotlib vispy
-```
+Generate a closed axisymmetric singlet from two Cartesian-oval surfaces,
+with adaptive tessellation and headless binary STL export. The analytic
+near-axis oval formulation is retained; the surfaces satisfy their signed
+Cartesian-oval optical-path equations, including virtual conjugates.
 
 ## Quick start
 
-Edit [`queue/params.json`](queue/params.json) to define the optical setup:
+Python 3.10 or newer:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[test]'
+python main.py --config queue/params.json --output lens.stl --report lens.json
+python -m pytest -v
+```
+
+No viewer or display is needed. The CLI also works as `cartesian-lens` after
+installation. Without `--config`, it uses the legacy example values shown
+below, interpreted as centimetres.
+
+Output STL coordinates are **millimetres**. STL itself does not encode
+units: select millimetres when importing into a slicer or CAD application.
+The JSON report records the units, diameter, thickness, positive volume,
+vertex/triangle counts and sampled fidelity measurements.
+
+## Optical parameters and units
 
 ```json
 {
@@ -48,61 +35,152 @@ Edit [`queue/params.json`](queue/params.json) to define the optical setup:
   "z2": 30.0,
   "n0": 1.0,
   "n1": 1.5,
-  "t": 4.0
+  "t": 4.0,
+  "units": "cm"
 }
 ```
 
-Then run:
-
-```bash
-python main.py
-```
-
-The script prints the lens diameter and intersection point, opens a VisPy 3D
-mesh view, and then displays the meridional profile in Matplotlib. Close the
-3D window to continue to the 2D plot.
-
-Set `SHOW_3D` or `SHOW_2D` to `False` in `main.py` if the environment does not
-support GUI windows.
-
-## Parameters
-
 | Parameter | Meaning |
 | --- | --- |
-| `z0` | Object position for the first surface |
-| `z1` | Intermediate image position shared by the two surfaces |
-| `z2` | Final image position for the second surface |
-| `n0` | Refractive index of the surrounding medium |
-| `n1` | Refractive index of the lens material |
-| `t` | Axial shift between the two surfaces; interpreted as lens width in the example |
+| `z0` | First object coordinate is `-z0` |
+| `z1` | Shared intermediate image coordinate |
+| `z2` | Final image coordinate |
+| `n0` | Positive surrounding refractive index |
+| `n1` | Distinct positive lens refractive index |
+| `t` | Positive second-vertex axial shift from the first vertex |
+| `units` | Input lengths: `cm` or `mm`; omitted means legacy `cm` |
 
-The current `main.py` uses the constants `N_RHO` and `N_ANG` at the top of the
-file for profile and angular mesh resolution. Although the sample JSON contains
-`rho_points`, `main.py` does not currently read that value.
+The first surface uses object/image coordinates `(-z0, z1)`. The second
+uses `(z1, z2)`, so its first conjugate is virtual in the example.
+Coordinates are absolute along the optical axis. A surface at `t_shift`
+uses local signed object distance `z0+t_shift` and local image distance
+`zi-t_shift`. The shift is added to its sag exactly once.
 
-## Export an STL
+The CLI converts all lengths to mm before geometry generation.
+`--input-units mm` overrides configuration units. Legacy `rho_points`
+configuration entries are accepted but do not control adaptive meshing.
 
-`main.py` currently generates and visualizes the mesh, but it does **not**
-write an STL file by itself. Add the following after the call to
-`revolve_curve` in `main.py` to export one:
+## Using a nominal 5 micrometre printer resolution
 
-```python
-from surface_generation import export_to_stl
-
-export_to_stl("cartesian_singlet.stl", vertices, faces, solid_name="cartesian_singlet")
+```bash
+python main.py --output lens.stl --resolution-um 5 --surface-error-um 1
 ```
 
-For a finer mesh, increase `N_RHO` and `N_ANG`. This increases the number of
-vertices and triangles; confirm the resulting STL is suitable for the target
-CAD or manufacturing workflow.
+The default nominal resolution is 5 µm. The default numerical surface-error
+budget is resolution/5, or **1 µm**. This is a practical tessellation
+heuristic, not a claim that the printed lens has 1 µm or 5 µm surface accuracy.
+Changing `--resolution-um` changes that default budget; an explicit
+`--surface-error-um` takes precedence.
+
+The meridian subdivides where seven interior analytic points depart from a
+straight chord by more than 30% of the requested budget. The azimuth segment
+count follows the circular sagitta bound
+`r_max * (1 - cos(pi/n)) <= 0.3 * budget`. This avoids a uniform 5 µm grid
+over the whole lens while allowing the mesh to follow the curved surfaces.
+
+Before export, each meridional interval's two triangle shapes are audited on
+a 17 by 17 interior parameter grid in one angular sector. Rotational symmetry
+covers the other sectors. At each sample, the analytic oval is inverted at
+the mesh point's cylindrical radius; the vertical discrepancy is an upper
+bound on that sampled point's distance to the analytic surface. The report
+records the maximum sampled discrepancy and the maximum float32 vertex
+rounding displacement. Their sum must fit the requested budget.
+
+This is **sampled validation, not a certified global Hausdorff error bound**.
+The sample grid can miss an extremum. Tighten the budget and compare results
+for demanding work. The tests include a denser, differently spaced audit and
+a refinement convergence check. Steep or unsupported branches are rejected
+when the requested sampled budget cannot be met.
+
+A printer's quoted resolution may describe XY pixels or voxels, rather than
+axial layer height. Cure spread, shrinkage, material index/dispersion, surface
+roughness and finishing affect the result independently. Neither this mesh
+audit nor a constant optical path for each individual surface establishes
+the focusing performance of a complete manufactured lens. Measure the
+printed part and perform optical/ray validation for the intended application.
+
+## A finite rim for printing
+
+The full intersection lens has **zero edge thickness**: its two surfaces
+meet at a mathematical knife edge. For a finite printable rim, choose a
+clear aperture smaller than the reported full-intersection diameter:
+
+```bash
+python main.py --aperture-diameter-mm 180 --output lens_with_rim.stl
+```
+
+Both exact oval branches are trimmed at that radius, then connected by a
+cylindrical side wall. The mesh shares each edge ring with the adjacent
+optical surface. The report records finite-rim status, edge thickness and
+a sampled minimum axial thickness. The circular side wall follows the same
+azimuth sagitta budget. Choose an edge thickness appropriate for your
+material, printer and handling; this option supplies no strength guarantee.
+The Python API accepts `aperture_radius_mm`.
+
+## Mesh and resource checks
+
+The profile begins and ends at exact axis poles. Each pole is one vertex;
+the full optical surfaces share one intersection ring (trimmed lenses have
+two distinct edge rings joined by the cylindrical rim). There are no repeated
+seam vertices or collapsed triangles. Every edge must appear twice with
+opposite directions, every triangle must have positive area, and signed
+volume must be positive. The same checks run after float32 STL quantization.
+
+The default limits are 1,000,000 vertices and 2,000,000 triangles. Counts
+are checked before allocating the mesh. Profile refinement also has a
+10,000-point limit per surface and a depth limit. Exceeding a limit fails
+with an actionable error; it never silently lowers fidelity.
+
+```bash
+python main.py --surface-error-um 2 --max-vertices 1000000 --max-faces 2000000
+```
+
+Invalid/nonfinite inputs, singular optical parameters, nonpositive
+thickness, failed intersection solves, or a nonmonotonic radial branch
+produce errors. This implementation supports the near-axis lens bounded by
+an intersection between the two vertex planes. It does not select arbitrary
+disconnected oval branches.
+
+## Python API
+
+The core geometry API takes a single consistent length unit. To interpret
+`surface_error_mm` and the metrics correctly, provide lengths in mm:
+
+```python
+from singlet import SigmaCurve, OmegaLens
+from surface_generation import build_lens_mesh, export_to_stl
+
+front = SigmaCurve(1_000_000, 600, 1.0, 1.5)
+back = SigmaCurve(-600, 300, 1.5, 1.0, t_shift=40)
+lens = OmegaLens(front, back)
+vertices, faces, metrics = build_lens_mesh(lens, surface_error_mm=0.001)
+export_to_stl("lens.stl", vertices, faces)
+print(metrics)
+```
+
+`SigmaCurve.get_points(rhof)` includes the exact pole. Without `rhof`, it
+uses the lens intersection extent after `OmegaLens` construction.
+`revolve_curve(profile, n_ang)` now interprets `n_ang` as the actual number
+of azimuth segments (the old implementation used twice that count).
+`export_to_stl` now writes binary STL, in bounded chunks.
+
+## Optional interactive view
+
+```bash
+pip install -e '.[view]'
+python main.py --output lens.stl --view
+```
+
+Viewing is explicit and happens after the validated file is written.
 
 ## Project layout
 
 | File | Responsibility |
 | --- | --- |
-| `main.py` | Loads parameters and creates the lens mesh and visualizations |
-| `singlet.py` | Cartesian-ovoid curves and singlet intersection logic |
-| `math_utils.py` | Bisection and Newton-Raphson numerical routines |
-| `surface_generation.py` | Surface of revolution, mesh construction, and STL export |
-| `viewer.py` | VisPy and Matplotlib visualization helpers |
-| `queue/params.json` | Example optical parameters |
+| `main.py` | CLI configuration, units, export and JSON metrics |
+| `singlet.py` | Analytic Cartesian ovals, signed optical paths and bounded intersection |
+| `math_utils.py` | Bounded root helpers |
+| `surface_generation.py` | Adaptive profile, manifold mesh, sampled audit and binary STL |
+| `viewer.py` | Optional VisPy and Matplotlib helpers |
+| `queue/params.json` | Legacy example, with explicit cm input units |
+| `qa/test_lens.py` | Asserted optical, geometric, topology, CLI and STL regressions |
