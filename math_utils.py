@@ -1,49 +1,57 @@
+"""Bounded root helpers; failures never return an unvalidated last iterate."""
 import numpy as np
 
+def _value(f, x):
+    result = float(f(x))
+    if not np.isfinite(result):
+        raise ValueError("Root function must return finite scalar values")
+    return result
+
+def _integer(value, name, minimum):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+
 def biseccion(f, a, b, tol=1e-6, max_iter=100):
-    """Bisection Method for find roots of the function f in the interval [a, b]"""
-    fa, fb = f(a), f(b)
-
-    if fa * fb > 0:
-        raise ValueError("La función debe cambiar de signo en el intervalo.")
-
+    _integer(max_iter, "max_iter", 1)
+    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0:
+        raise ValueError("Require finite a < b, positive tolerance and iteration budget")
+    fa, fb = _value(f, a), _value(f, b)
+    if fa == 0:
+        return a
+    if fb == 0:
+        return b
+    if np.signbit(fa) == np.signbit(fb):
+        raise ValueError("Root must be bracketed by opposite signs")
     for _ in range(max_iter):
-        c = 0.5 * (a + b)
-        fc = f(c)
-
-        if abs(fc) < tol or (b - a) / 2 < tol:
+        c = a+(b-a)/2
+        fc = _value(f, c)
+        if fc == 0 or (b-a)/2 <= tol:
             return c
-
-        if fa * fc < 0:
+        if np.signbit(fa) != np.signbit(fc):
             b, fb = c, fc
         else:
             a, fa = c, fc
+    raise RuntimeError("Bisection did not converge within max_iter")
 
-    raise RuntimeError(f"El método de bisección no convergió en {max_iter} steps.")
-
-
-
-def biseccion_mod(f, a, b, tol=1e-9, max_iter=100):
-    """Método de bisección"""
-    fa, fb = f(a), f(b)
-    
-    while fa * fb > 0:
-        b *= 1.5
-        fb = f(b)
-    
-    for i in range(max_iter):
-        c = 0.5 * (a + b)
-        fc = f(c)
-        
-        if abs(fc) < tol or (b - a) < tol:
-            return c
-            
-        if fa * fc < 0:
-            b, fb = c, fc
-        else:
-            a, fa = c, fc
-    return c
-
+def biseccion_mod(f, a, b, tol=1e-9, max_iter=100, max_expand=32):
+    _integer(max_iter, "max_iter", 1)
+    _integer(max_expand, "max_expand", 0)
+    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0:
+        raise ValueError("Invalid bracket, tolerance or iteration budget")
+    fa, fb = _value(f, a), _value(f, b)
+    for expansion in range(max_expand+1):
+        if fa == 0:
+            return a
+        if fb == 0:
+            return b
+        if np.signbit(fa) != np.signbit(fb):
+            return biseccion(f, a, b, tol, max_iter)
+        if expansion < max_expand:
+            b = a+1.5*(b-a)
+            if not np.isfinite(b):
+                raise ValueError("Bracket expansion overflow")
+            fb = _value(f, b)
+    raise ValueError("Could not bracket root within max_expand")
 
 def newton_raphson_2d(F, x0, tol=1e-10, max_iter=50):
     """
@@ -58,7 +66,10 @@ def newton_raphson_2d(F, x0, tol=1e-10, max_iter=50):
     Returns:
         (s1, s2) solution
     """
+    _integer(max_iter, "max_iter", 1)
     x = np.array(x0, dtype=float)
+    if x.shape != (2,) or not np.all(np.isfinite(x)) or tol <= 0 or max_iter < 1:
+        raise ValueError("Invalid Newton initial point, tolerance or iteration budget")
     
     def jacobian(F, x, h=1e-8):
         """Numerical Jacobian via finite differences."""
@@ -73,6 +84,8 @@ def newton_raphson_2d(F, x0, tol=1e-10, max_iter=50):
 
     for _ in range(max_iter):
         f_val = np.array(F(*x))
+        if f_val.shape != (2,) or not np.all(np.isfinite(f_val)):
+            raise ValueError("Newton residual must be two finite values")
         if np.linalg.norm(f_val, ord=2) < tol:
             return tuple(x)
         J = jacobian(F, x)
@@ -81,7 +94,9 @@ def newton_raphson_2d(F, x0, tol=1e-10, max_iter=50):
         except np.linalg.LinAlgError:
             raise ValueError(f"Jacobian is singular at {x}")
         x += delta
-        if np.linalg.norm(delta, ord=2) < tol:
+        if not np.all(np.isfinite(x)):
+            raise ValueError("Newton iterate is not finite")
+        if np.linalg.norm(delta, ord=2) < tol and np.linalg.norm(F(*x)) < tol:
             return tuple(x)
 
     raise RuntimeError("Newton–Raphson did not converge.")
