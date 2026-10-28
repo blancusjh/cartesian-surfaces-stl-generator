@@ -88,7 +88,9 @@ rounding displacement. Their sum must fit the requested budget.
 
 This is **sampled validation, not a certified global Hausdorff error bound**.
 The sample grid can miss an extremum. Tighten the budget and compare results
-for demanding work. The tests include a denser, differently spaced audit and
+for demanding work. The tests include a denser, differently spaced audit, an independent actual
+mesh face-interior check using a separate analytic inverse, signed Snell ray
+relations for both optical surfaces, and
 a refinement convergence check. Steep or unsupported branches are rejected
 when the requested sampled budget cannot be met.
 
@@ -106,7 +108,7 @@ meet at a mathematical knife edge. For a finite printable rim, choose a
 clear aperture smaller than the reported full-intersection diameter:
 
 ```bash
-python main.py --aperture-diameter-mm 180 --output lens_with_rim.stl
+python main.py --config queue/lens_20mm.json --aperture-diameter-mm 20 --output lens_20mm.stl
 ```
 
 Both exact oval branches are trimmed at that radius, then connected by a
@@ -116,8 +118,12 @@ a sampled minimum axial thickness. The circular side wall follows the same
 azimuth sagitta budget. Choose an edge thickness appropriate for your
 material, printer and handling; this option supplies no strength guarantee.
 The Python API accepts `aperture_radius_mm`. Successful GitHub Actions runs
-also attach the 180 mm finite-rim example STL and its metrics as a downloadable
-artifact, retained for 14 days.
+also attach the 20 mm finite-rim example STL and its metrics as a downloadable
+artifact, retained for 7 days. Open a successful run under the repository's
+Actions tab and download `lens-20mm-with-finite-rim-and-metrics`. This example
+uses `queue/lens_20mm.json` (mm input, 4 mm axial thickness), independently
+of the much larger legacy cm example. The workflow smoke tests a regular
+wheel installation outside the checkout.
 
 ## Mesh and resource checks
 
@@ -139,7 +145,9 @@ python main.py --surface-error-um 2 --max-vertices 1000000 --max-faces 2000000
 
 Invalid/nonfinite inputs, singular optical parameters, nonpositive
 thickness, failed intersection solves, or a nonmonotonic radial branch
-produce errors. This implementation supports the near-axis lens bounded by
+produce errors. The CLI rejects collisions among configuration, STL and report
+paths before writing, so a report cannot replace the STL or its source JSON.
+This implementation supports the near-axis lens bounded by
 an intersection between the two vertex planes. It does not select arbitrary
 disconnected oval branches.
 
@@ -185,4 +193,5 @@ Viewing is explicit and happens after the validated file is written.
 | `surface_generation.py` | Adaptive profile, manifold mesh, sampled audit and binary STL |
 | `viewer.py` | Optional VisPy and Matplotlib helpers |
 | `queue/params.json` | Legacy example, with explicit cm input units |
+| `queue/lens_20mm.json` | Smaller mm example for a 20 mm aperture and finite rim |
 | `qa/test_lens.py` | Asserted optical, geometric, topology, CLI and STL regressions |

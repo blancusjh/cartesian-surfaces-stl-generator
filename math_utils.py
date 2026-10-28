@@ -7,8 +7,13 @@ def _value(f, x):
         raise ValueError("Root function must return finite scalar values")
     return result
 
+def _integer(value, name, minimum):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+
 def biseccion(f, a, b, tol=1e-6, max_iter=100):
-    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0 or max_iter < 1:
+    _integer(max_iter, "max_iter", 1)
+    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0:
         raise ValueError("Require finite a < b, positive tolerance and iteration budget")
     fa, fb = _value(f, a), _value(f, b)
     if fa == 0:
@@ -29,7 +34,9 @@ def biseccion(f, a, b, tol=1e-6, max_iter=100):
     raise RuntimeError("Bisection did not converge within max_iter")
 
 def biseccion_mod(f, a, b, tol=1e-9, max_iter=100, max_expand=32):
-    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0 or max_iter < 1 or max_expand < 0:
+    _integer(max_iter, "max_iter", 1)
+    _integer(max_expand, "max_expand", 0)
+    if not np.all(np.isfinite([a, b, tol])) or a >= b or tol <= 0:
         raise ValueError("Invalid bracket, tolerance or iteration budget")
     fa, fb = _value(f, a), _value(f, b)
     for expansion in range(max_expand+1):
@@ -59,6 +66,7 @@ def newton_raphson_2d(F, x0, tol=1e-10, max_iter=50):
     Returns:
         (s1, s2) solution
     """
+    _integer(max_iter, "max_iter", 1)
     x = np.array(x0, dtype=float)
     if x.shape != (2,) or not np.all(np.isfinite(x)) or tol <= 0 or max_iter < 1:
         raise ValueError("Invalid Newton initial point, tolerance or iteration budget")

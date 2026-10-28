@@ -8,15 +8,23 @@ def sigma(z0, zi, rho, n0, ni):
     The object is at -z0 and the image at zi. Negative distances denote
     virtual conjugates. All lengths must use the same unit.
     """
-    z0 = -float(z0)
+    values = np.asarray([z0, zi, n0, ni], dtype=float)
+    if not np.all(np.isfinite(values)) or values[2] <= 0 or values[3] <= 0 or values[2] == values[3]:
+        raise ValueError("Finite conjugates and distinct positive refractive indices required")
+    z0, zi, n0, ni = values
+    z0 = -z0
+    if z0 == 0 or zi == 0 or ni*zi-n0*z0 == 0 or ni*z0-n0*zi == 0:
+        raise ValueError("Singular conjugates for this Cartesian-oval formulation")
     rho = np.asarray(rho, dtype=float)
     if (not np.all(np.isfinite(rho))) or np.any(rho < 0):
         raise ValueError("rho must be finite and nonnegative")
-    G = (ni**2*zi - n0**2*z0)**2 / (ni*n0*(ni*zi-n0*z0)*(ni*z0-n0*zi))
-    O = (ni*z0-n0*zi) / (zi*z0*(ni-n0))
-    T = (ni-n0)*(ni+n0)**2 / (4*ni*n0*zi*z0*(ni*zi-n0*z0))
-    S = (ni+n0)*(ni**2*zi-n0**2*z0) / (2*ni*n0*zi*z0*(ni*zi-n0*z0))
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        G = (ni**2*zi - n0**2*z0)**2 / (ni*n0*(ni*zi-n0*z0)*(ni*z0-n0*zi))
+        O = (ni*z0-n0*zi) / (zi*z0*(ni-n0))
+        T = (ni-n0)*(ni+n0)**2 / (4*ni*n0*zi*z0*(ni*zi-n0*z0))
+        S = (ni+n0)*(ni**2*zi-n0**2*z0) / (2*ni*n0*zi*z0*(ni*zi-n0*z0))
+        if not np.all(np.isfinite([G, O, T, S])):
+            raise ValueError("Optical parameters exceed the numerical formulation range")
         z = (O+T*rho**2)*rho**2 / (1+S*rho**2+np.sqrt(1+(2*S-O**2*G)*rho**2))
         r = np.sqrt(rho**2-z**2)
     if not np.all(np.isfinite(z)) or not np.all(np.isfinite(r)):
@@ -37,6 +45,7 @@ class SigmaCurve:
         a, b = -self.local_z0, self.local_zi
         if a == 0 or b == 0 or ni*b-n0*a == 0 or ni*a-n0*b == 0:
             raise ValueError("Singular conjugates for this Cartesian-oval formulation")
+        sigma(self.local_z0, self.local_zi, 0.0, self.n0, self.ni)
         self.rho_end = None
 
     def evaluate(self, rho):

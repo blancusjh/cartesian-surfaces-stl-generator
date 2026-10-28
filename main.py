@@ -20,6 +20,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         import math
+        output_path = args.output.resolve()
+        config_path = args.config.resolve() if args.config else None
+        report_path = args.report.resolve() if args.report else None
+        if output_path == config_path or report_path == output_path or (report_path is not None and report_path == config_path):
+            raise ValueError("Config, STL output and report paths must be distinct")
         if not math.isfinite(args.resolution_um) or args.resolution_um <= 0:
             raise ValueError("resolution-um must be positive and finite")
         params = (json.loads(args.config.read_text()) if args.config else

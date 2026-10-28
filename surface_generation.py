@@ -3,8 +3,13 @@ import struct
 from pathlib import Path
 import numpy as np
 
+def _integer_budget(value, name, minimum):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+
 def adaptive_profile(surface, rho_end, error, max_points=10000):
     """Refine using seven interior chord probes. This is a sampled error criterion."""
+    _integer_budget(max_points, "max_points", 2)
     if not np.isfinite(error) or error <= 0:
         raise ValueError("error must be positive and finite")
     result = [(0.0, surface.evaluate(0.0))]
@@ -54,6 +59,8 @@ def validate_mesh(vertices, faces):
 
 def revolve_curve(curve_pts, n_ang, max_vertices=1000000, max_faces=2000000):
     """Revolve an axis-to-axis (z,r) profile; n_ang is the azimuth segment count."""
+    _integer_budget(max_vertices, "max_vertices", 5)
+    _integer_budget(max_faces, "max_faces", 6)
     p = np.asarray(curve_pts, dtype=float)
     if p.ndim != 2 or p.shape[1] != 2 or len(p) < 3 or not np.all(np.isfinite(p)):
         raise ValueError("Profile must be a finite Nx2 array with at least three points")
@@ -61,8 +68,7 @@ def revolve_curve(curve_pts, n_ang, max_vertices=1000000, max_faces=2000000):
         raise ValueError("Profile must have exactly two axis poles and positive interior radii")
     if np.any(np.linalg.norm(np.diff(p, axis=0), axis=1) == 0):
         raise ValueError("Profile contains duplicate neighbors")
-    if not isinstance(n_ang, (int, np.integer)) or n_ang < 3:
-        raise ValueError("n_ang must be an integer >= 3")
+    _integer_budget(n_ang, "n_ang", 3)
     rings = len(p)-2
     nv, nf = 2+rings*n_ang, 2*rings*n_ang
     if nv > max_vertices or nf > max_faces:
@@ -138,8 +144,8 @@ def build_lens_mesh(lens, surface_error_mm=0.001, max_vertices=1000000, max_face
     error = float(surface_error_mm)
     if not np.isfinite(error) or error <= 0:
         raise ValueError("surface_error_mm must be positive and finite")
-    if max_vertices < 5 or max_faces < 6:
-        raise ValueError("Resource limits are too small")
+    _integer_budget(max_vertices, "max_vertices", 5)
+    _integer_budget(max_faces, "max_faces", 6)
     full_radius = lens.intersection_point[1]
     radius = full_radius if aperture_radius_mm is None else float(aperture_radius_mm)
     if not np.isfinite(radius) or radius <= 0 or radius > full_radius:

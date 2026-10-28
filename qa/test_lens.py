@@ -66,7 +66,7 @@ def test_closed_outward_manifold_and_sampled_fidelity(shift, thickness):
     assert np.all(mesh.area_faces > 0)
     assert report["sampled_surface_error_um"]+report["stl_rounding_bound_um"] <= 5
     assert len(np.unique(v, axis=0)) == len(v)
-    # Independent denser audit, at a different grid spacing from production.
+    # Denser audit at a different grid spacing from production.
     for surface, end in zip((lens.s1, lens.s2), lens.rho_intersection):
         rho, _ = adaptive_profile(surface, end, 0.005*0.3)
         assert sampled_surface_error(surface, rho, report["azimuth_segments"], subdivisions=23) < 0.005
@@ -172,3 +172,57 @@ def test_actual_mesh_face_interior_against_independent_analytic_inverse():
             exact_z = float(surface.evaluate(rho)[0])
             distances.append(abs(point[2]-exact_z))
         assert min(distances) < 0.005
+
+@pytest.mark.parametrize("shift", [0, 1.5])
+def test_independent_snell_tangential_ray_relation(shift):
+    lens = lens_at(shift)
+    for surface, end in zip((lens.s1, lens.s2), lens.rho_intersection):
+        for fraction in (0.2, 0.5, 0.8):
+            rho, step = end*fraction, end*1e-5
+            point = surface.evaluate(rho)
+            tangent = surface.evaluate(rho+step)-surface.evaluate(rho-step)
+            tangent /= np.linalg.norm(tangent)
+            object_point = np.array([-surface.z0, 0])
+            image_point = np.array([surface.zi, 0])
+            incident = np.sign(surface.t_shift-object_point[0])*(point-object_point)
+            outgoing = np.sign(image_point[0]-surface.t_shift)*(image_point-point)
+            incident /= np.linalg.norm(incident)
+            outgoing /= np.linalg.norm(outgoing)
+            assert incident[0] > 0 and outgoing[0] > 0
+            # Snell's law: weighted tangential ray components are continuous.
+            assert abs(np.dot(surface.n0*incident-surface.ni*outgoing, tangent)) < 1e-8
+
+@pytest.mark.parametrize("collision", ["config_output", "report_output", "report_config"])
+def test_cli_rejects_path_collisions_without_writing(tmp_path, collision):
+    config = tmp_path/"source.json"
+    original = json.dumps(dict(z0=100000, z1=60, z2=30, n0=1, n1=1.5, t=4, units="mm"))
+    config.write_text(original)
+    output, report = tmp_path/"lens.stl", tmp_path/"report.json"
+    if collision == "config_output":
+        output = config
+    elif collision == "report_output":
+        report = output
+    else:
+        report = config
+    result = subprocess.run([sys.executable, "main.py", "--config", str(config),
+                             "--output", str(output), "--report", str(report)],
+                            capture_output=True, text=True)
+    assert result.returncode != 0 and "paths must be distinct" in result.stderr
+    assert config.read_text() == original
+    assert not (tmp_path/"lens.stl").exists()
+    assert not (tmp_path/"report.json").exists()
+
+def test_public_numeric_arguments_reject_invalid_parameters():
+    for args in [(0, 2, 0, 1, 1.5), (1, 2, 0, 1, 1), (1, 2, 0, 0, 1.5),
+                 (1, 2, 0, np.nan, 1.5), (1, 2, 0, 1, np.inf)]:
+        with pytest.raises(ValueError):
+            sigma(*args)
+    for invalid in (np.nan, np.inf, 1.5, True, -1):
+        with pytest.raises(ValueError):
+            biseccion(lambda x: x, 0, 1, max_iter=invalid)
+        with pytest.raises(ValueError):
+            biseccion_mod(lambda x: x, 0, 1, max_expand=invalid)
+        with pytest.raises(ValueError):
+            build_lens_mesh(lens_at(), 0.005, max_vertices=invalid)
+        with pytest.raises(ValueError):
+            build_lens_mesh(lens_at(), 0.005, max_faces=invalid)

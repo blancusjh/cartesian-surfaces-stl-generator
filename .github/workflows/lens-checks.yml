@@ -2,7 +2,7 @@ name: Lens geometry checks
 
 on:
   push:
-    branches: ["codex/lens-adaptive-print-mesh"]
+    branches: ["master", "codex/lens-adaptive-print-mesh"]
   pull_request:
   workflow_dispatch:
 
@@ -21,12 +21,17 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[test]'
       - run: python -m pytest -v
-      - name: Export finite-rim example at the default 1 micrometre budget
-        run: python main.py --config queue/params.json --aperture-diameter-mm 180 --output lens_with_rim.stl --report lens_with_rim.json
+      - name: Build and smoke test the installed wheel outside the checkout
+        run: |
+          python -m pip wheel --no-deps . --wheel-dir dist
+          python -m venv /tmp/lens-wheel-smoke
+          /tmp/lens-wheel-smoke/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/lens-wheel-smoke/bin/cartesian-lens --config "$GITHUB_WORKSPACE/queue/lens_20mm.json" --aperture-diameter-mm 20 --output "$GITHUB_WORKSPACE/lens_20mm.stl" --report "$GITHUB_WORKSPACE/lens_20mm.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: lens-with-finite-rim-and-metrics
+          name: lens-20mm-with-finite-rim-and-metrics
           path: |
-            lens_with_rim.stl
-            lens_with_rim.json
-          retention-days: 14
+            lens_20mm.stl
+            lens_20mm.json
+          retention-days: 7
