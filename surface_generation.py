@@ -144,7 +144,7 @@ def build_lens_mesh(lens, surface_error_mm=0.001, max_vertices=1000000, max_face
     radius = full_radius if aperture_radius_mm is None else float(aperture_radius_mm)
     if not np.isfinite(radius) or radius <= 0 or radius > full_radius:
         raise ValueError("Aperture radius must be positive and no larger than the surface intersection")
-    clipped = radius < full_radius
+    clipped = bool(radius < full_radius)
     ends = (tuple(float(_rho_at_radius(s, end, radius))
                   for s, end in zip((lens.s1, lens.s2), lens.rho_intersection))
             if clipped else lens.rho_intersection)
@@ -172,6 +172,8 @@ def build_lens_mesh(lens, surface_error_mm=0.001, max_vertices=1000000, max_face
     vertices, faces = revolve_curve(profile, n_ang, max_vertices, max_faces)
     sampled = max(sampled_surface_error(s, data[0], n_ang)
                   for s, data in zip((lens.s1, lens.s2), profiles))
+    rim_sagitta = float(radius*(1-np.cos(np.pi/n_ang))) if clipped else 0.0
+    sampled = max(sampled, rim_sagitta)
     rounding = float(np.linalg.norm(vertices.astype(np.float32).astype(float)-vertices, axis=1).max())
     if sampled+rounding > error:
         raise ValueError("Sampled triangle error plus binary STL rounding exceeds requested surface error")
@@ -182,6 +184,7 @@ def build_lens_mesh(lens, surface_error_mm=0.001, max_vertices=1000000, max_face
                   surface_error_requested_um=error*1000,
                   sampled_surface_error_um=sampled*1000,
                   stl_rounding_bound_um=rounding*1000,
+                  rim_sagitta_bound_um=rim_sagitta*1000,
                   volume_mm3=signed_volume(vertices, faces),
                   diameter_mm=2*radius,
                   thickness_mm=lens.s2.t_shift-lens.s1.t_shift,

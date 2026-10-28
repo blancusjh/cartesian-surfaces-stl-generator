@@ -94,7 +94,8 @@ def test_binary_roundtrip_has_mm_geometry(tmp_path):
 def test_cli_legacy_cm_to_mm_and_default_one_micron_budget(tmp_path):
     output, report_path = tmp_path/"lens.stl", tmp_path/"metrics.json"
     result = subprocess.run([sys.executable, "main.py", "--output", str(output),
-                             "--report", str(report_path)], capture_output=True, text=True, check=True)
+                             "--report", str(report_path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
     assert report == json.loads(report_path.read_text())
     assert report["input_units"] == "cm" and report["units"] == "mm"
