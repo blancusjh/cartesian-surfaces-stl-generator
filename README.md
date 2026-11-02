@@ -106,3 +106,9 @@ CAD or manufacturing workflow.
 | `surface_generation.py` | Surface of revolution, mesh construction, and STL export |
 | `viewer.py` | VisPy and Matplotlib visualization helpers |
 | `queue/params.json` | Example optical parameters |
+
+## License
+
+Original project code and documentation are licensed under the [MIT License](LICENSE).
+Third-party code, publications, datasets, fonts, and other assets retain their
+respective licenses and copyright notices; this license does not replace them.
